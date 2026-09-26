@@ -43,7 +43,8 @@ extension Solve: FetchableRecord, PersistableRecord {
     public static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
 
     public static func databaseDateEncodingStrategy(for column: String) -> DatabaseDateEncodingStrategy {
-        .millisecondsSince1970
+        // Rounded, not GRDB's floor: `Date(milliseconds:)` values must map back to the same integer.
+        .custom { $0.milliseconds }
     }
 
     public static func databaseDateDecodingStrategy(for column: String) -> DatabaseDateDecodingStrategy {
@@ -54,7 +55,17 @@ extension Solve: FetchableRecord, PersistableRecord {
         .lowercaseString
     }
 
+    /// Flags a locally changed solve for the next sync push. (New rows default to needing a push.)
+    static func markNeedsPush(_ id: UUID, _ db: Database) throws {
+        try db.execute(sql: "UPDATE solves SET needs_push = 1 WHERE id = ?", arguments: [id.databaseString])
+    }
+
     static var active: QueryInterfaceRequest<Solve> {
         all().filter(Columns.deletedAt == nil)
     }
+}
+
+extension UUID {
+    /// How ids are stored: lowercase text.
+    var databaseString: String { uuidString.lowercased() }
 }

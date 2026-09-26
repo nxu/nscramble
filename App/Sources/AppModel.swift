@@ -16,6 +16,24 @@ final class AppModel {
     private(set) var todaysRecentSolves: [Solve] = []
     private(set) var errorMessage: String?
 
+    enum SyncStatus: Equatable {
+        case never
+        case syncing
+        case synced(Date)
+        case failed(String)
+    }
+
+    private(set) var syncStatus = SyncStatus.never
+    private(set) var hasAPIKey = Keychain.read(AppModel.apiKeyAccount) != nil
+    /// Base URL of the sync worker, e.g. `https://nscramble-sync.<you>.workers.dev`.
+    private(set) var syncURL = UserDefaults.standard.string(forKey: "syncURL") ?? ""
+    private static let apiKeyAccount = "sync-api-key"
+    /// Sync on launch and every `autoSyncInterval` while the app is open.
+    var autoSync = UserDefaults.standard.object(forKey: "autoSync") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoSync, forKey: "autoSync") }
+    }
+    static let autoSyncInterval = Duration.seconds(2 * 60 * 60)
+
     var appearance = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
     }
@@ -37,6 +55,7 @@ final class AppModel {
             errorMessage = "Couldn't open the database; solves won't be saved. \(error.localizedDescription)"
         }
         Task { await advanceScramble() }
+        Task { await runAutoSync() }
     }
 
     // MARK: Timer input
@@ -70,6 +89,75 @@ final class AppModel {
             errorMessage = "Couldn't save the solve. \(error.localizedDescription)"
         }
         Task { await advanceScramble() }
+    }
+
+    // MARK: Sync
+
+    private var isSyncConfigured: Bool {
+        Self.validSyncURL(syncURL) != nil && hasAPIKey
+    }
+
+    /// Syncs at launch, then every `autoSyncInterval`, when enabled and configured.
+    private func runAutoSync() async {
+        while !Task.isCancelled {
+            if autoSync && isSyncConfigured {
+                await syncNow()
+            }
+            try? await Task.sleep(for: Self.autoSyncInterval)
+        }
+    }
+
+    func syncNow() async {
+        guard syncStatus != .syncing else { return }
+        guard let url = Self.validSyncURL(syncURL), let apiKey = Keychain.read(Self.apiKeyAccount) else {
+            syncStatus = .failed("Set the server URL and API key first.")
+            return
+        }
+        syncStatus = .syncing
+        do {
+            try await database.sync(using: HTTPSyncTransport(baseURL: url, apiKey: apiKey))
+            syncStatus = .synced(Date())
+            refreshStats()
+            if let id = lastSolve?.id {
+                lastSolve = try database.solve(id: id)
+            }
+        } catch {
+            syncStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Saves the server URL, and the API key unless `apiKey` is empty (keeps the stored one).
+    func saveSyncSettings(url: String, apiKey: String) throws {
+        let url = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.validSyncURL(url) != nil else {
+            throw NSError(domain: "NScramble", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Enter an https:// URL (http:// only for localhost).",
+            ])
+        }
+        let apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !apiKey.isEmpty {
+            try Keychain.write(apiKey, account: Self.apiKeyAccount)
+            hasAPIKey = true
+        }
+        syncURL = url
+        UserDefaults.standard.set(url, forKey: "syncURL")
+        if case .failed = syncStatus {
+            syncStatus = .never
+        }
+    }
+
+    func removeAPIKey() {
+        Keychain.delete(Self.apiKeyAccount)
+        hasAPIKey = false
+    }
+
+    static func validSyncURL(_ string: String) -> URL? {
+        guard let url = URL(string: string), let host = url.host(), !host.isEmpty else { return nil }
+        switch url.scheme {
+        case "https": return url
+        case "http" where host == "localhost" || host == "127.0.0.1": return url
+        default: return nil
+        }
     }
 
     // MARK: Stats

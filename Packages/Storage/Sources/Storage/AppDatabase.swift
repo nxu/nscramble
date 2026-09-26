@@ -55,6 +55,17 @@ public final class AppDatabase: Sendable {
                 CREATE INDEX solves_date ON solves(date);
                 """)
         }
+        migrator.registerMigration("v3: sync") { db in
+            // needs_push: changed locally and not yet accepted by the sync server.
+            try db.execute(sql: """
+                ALTER TABLE solves ADD COLUMN needs_push INTEGER NOT NULL DEFAULT 1;
+                CREATE INDEX solves_needs_push ON solves(needs_push) WHERE needs_push = 1;
+                CREATE TABLE sync_state (
+                    key TEXT PRIMARY KEY NOT NULL,
+                    value TEXT NOT NULL
+                );
+                """)
+        }
         return migrator
     }
 }
@@ -82,6 +93,7 @@ extension AppDatabase {
             solve.penalty = penalty
             solve.updatedAt = date
             try solve.update(db)
+            try Solve.markNeedsPush(solve.id, db)
             return solve
         }
     }
@@ -95,6 +107,7 @@ extension AppDatabase {
             solve.deletedAt = date
             solve.updatedAt = date
             try solve.update(db)
+            try Solve.markNeedsPush(solve.id, db)
             return solve
         }
     }
@@ -109,6 +122,7 @@ extension AppDatabase {
             solve.deletedAt = nil
             solve.updatedAt = date
             try solve.update(db)
+            try Solve.markNeedsPush(solve.id, db)
             return solve
         }
     }
@@ -124,6 +138,10 @@ extension AppDatabase {
         }
     }
 
+    public func solve(id: UUID) throws -> Solve? {
+        try writer.read { try Solve.fetchOne($0, key: id) }
+    }
+
     /// Non-deleted solves, newest first.
     public func solves(limit: Int? = nil) throws -> [Solve] {
         try writer.read { db in
@@ -133,8 +151,18 @@ extension AppDatabase {
 }
 
 extension Date {
+    /// Exactly `milliseconds` after 1970.
+    init(milliseconds: Int64) {
+        self.init(timeIntervalSince1970: Double(milliseconds) / 1000)
+    }
+
+    /// Milliseconds since 1970, as stored in the database and sent to the sync server.
+    var milliseconds: Int64 {
+        Int64((timeIntervalSince1970 * 1000).rounded())
+    }
+
     /// The database stores milliseconds; truncate so in-memory values match what's stored.
     var truncatedToMilliseconds: Date {
-        Date(timeIntervalSince1970: (timeIntervalSince1970 * 1000).rounded(.down) / 1000)
+        Date(milliseconds: Int64((timeIntervalSince1970 * 1000).rounded(.down)))
     }
 }

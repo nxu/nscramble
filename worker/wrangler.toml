@@ -1,0 +1,12 @@
+name = "nscramble-sync"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nscramble"
+# From `wrangler d1 create nscramble`.
+database_id = "REPLACE_WITH_DATABASE_ID"
+migrations_dir = "migrations"
+
+# The API key: `wrangler secret put SYNC_TOKEN`.

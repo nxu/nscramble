@@ -119,11 +119,15 @@ struct TimerScreen: View {
     }
     #endif
 
+    /// Scrollable stats with the sync card pinned below.
     private var statsPanel: some View {
-        TimelineView(.everyMinute) { context in
-            StatsPanel(stats: model.stats, recentSolves: model.todaysRecentSolves, date: context.date)
-                // Recompute when the day changes (and on first appearance).
-                .task(id: Solve.day(of: context.date)) { model.refreshStats() }
+        VStack(spacing: 0) {
+            TimelineView(.everyMinute) { context in
+                StatsPanel(stats: model.stats, recentSolves: model.todaysRecentSolves, date: context.date)
+                    // Recompute when the day changes (and on first appearance).
+                    .task(id: Solve.day(of: context.date)) { model.refreshStats() }
+            }
+            SyncCard()
         }
         .frame(width: Self.statsPanelWidth)
         .opacity(isTiming ? 0 : 1)

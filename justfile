@@ -5,14 +5,26 @@ bundle_id := "hu.nxu.nscramble"
 default:
     @just --list
 
-# Run all Swift package tests
-test:
+# Run all Swift package tests and the sync worker tests
+test: worker-test
     #!/usr/bin/env bash
     set -euo pipefail
     for p in {{packages}}; do
         echo "== $p"
         (cd Packages/$p && swift test)
     done
+
+# Test and typecheck the sync worker
+worker-test:
+    cd worker && bun install --silent && bun test && bunx tsc --noEmit
+
+# Local sync server (worker code on an in-memory database) at http://127.0.0.1:8788, API key "dev-token"
+worker-dev:
+    cd worker && bun install --silent && SYNC_TOKEN=dev-token bun scripts/dev-server.ts
+
+# Apply D1 migrations and deploy the sync worker to Cloudflare
+worker-deploy:
+    cd worker && wrangler d1 migrations apply nscramble --remote && wrangler deploy
 
 # Regenerate the cubing.js reference fixture used by ScrambleKit tests
 cubingjs-fixture:

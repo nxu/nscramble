@@ -18,6 +18,14 @@ targets:
     type: application
     supportedDestinations: [macOS, iOS]
     sources: [App/Sources, App/Resources]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Plain http is only used for a local sync server during development.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     dependencies:
       - package: ScrambleKit
       - package: StatsKit
