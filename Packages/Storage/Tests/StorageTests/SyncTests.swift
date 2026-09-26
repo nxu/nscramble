@@ -3,7 +3,7 @@ import StatsKit
 import Testing
 @testable import Storage
 
-/// In-memory stand-in for the worker, with the same rules: last write wins, revisions as cursor.
+/// In-memory stand-in for the sync server, following the protocol in Sync.swift.
 final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var rows: [String: (solve: SyncSolve, rev: Int64)] = [:]
@@ -131,10 +131,11 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     #expect(try mac.pendingSyncCount() == 1)
 }
 
-/// Against the real worker code: run `just worker-dev` first, then
-/// `NSCRAMBLE_SYNC_URL=http://127.0.0.1:8788 swift test --filter liveWorker`.
+/// Against a running sync server:
+/// `NSCRAMBLE_SYNC_URL=http://127.0.0.1:8788 NSCRAMBLE_SYNC_TOKEN=<key> swift test --filter liveServer`.
+/// Uses random ids, but leaves its test solves on the server.
 @Test(.enabled(if: ProcessInfo.processInfo.environment["NSCRAMBLE_SYNC_URL"] != nil))
-func liveWorker() async throws {
+func liveServer() async throws {
     let url = try #require(URL(string: ProcessInfo.processInfo.environment["NSCRAMBLE_SYNC_URL"]!))
     let transport = HTTPSyncTransport(baseURL: url, apiKey: ProcessInfo.processInfo.environment["NSCRAMBLE_SYNC_TOKEN"] ?? "dev-token")
     let mac = try AppDatabase.inMemory()

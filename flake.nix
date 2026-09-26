@@ -20,7 +20,6 @@
             packages = with pkgs; [
               bun
               just
-              wrangler
               xcodegen
             ];
           };

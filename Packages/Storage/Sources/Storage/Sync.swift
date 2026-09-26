@@ -2,7 +2,20 @@ import Foundation
 import GRDB
 import StatsKit
 
-/// A solve as sent to and received from the sync server (`worker/`): snake_case, epoch milliseconds.
+// Sync protocol (implemented by the sync server):
+//
+//   POST {baseURL}/sync
+//   Authorization: Bearer <API key>
+//   { "since": <rev>, "changes": [SyncSolve] }
+//   -> 200 { "rev": <rev>, "more": <bool>, "changes": [SyncSolve] }   401 on a bad key, 4xx { "error" } otherwise
+//
+// The server stores each pushed solve unless it already has one with the same id and an equal or newer
+// `updated_at` (last write wins), giving every stored change the next value of a server-wide revision
+// counter. It then returns the solves with a revision above `since`, in revision order, at most one page;
+// `rev` is the revision of the last one returned (or `since` if none) and `more` says whether to ask again.
+// The client saves `rev` and sends it as `since` next time, so clock differences between devices don't matter.
+
+/// A solve as sent to and received from the sync server: snake_case, epoch milliseconds.
 public struct SyncSolve: Codable, Equatable, Sendable {
     public var id: String
     public var created_at: Int64
@@ -61,7 +74,7 @@ public struct SyncResponse: Codable, Sendable {
     public var changes: [SyncSolve]
 }
 
-/// Sends one sync round trip. `HTTPSyncTransport` talks to the worker; tests can fake it.
+/// Sends one sync round trip. `HTTPSyncTransport` talks to the sync server; tests can fake it.
 public protocol SyncTransport: Sendable {
     func send(_ request: SyncRequest) async throws -> SyncResponse
 }

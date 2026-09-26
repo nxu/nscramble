@@ -25,7 +25,7 @@ final class AppModel {
 
     private(set) var syncStatus = SyncStatus.never
     private(set) var hasAPIKey = Keychain.read(AppModel.apiKeyAccount) != nil
-    /// Base URL of the sync worker, e.g. `https://nscramble-sync.<you>.workers.dev`.
+    /// Base URL of the sync server, e.g. `https://sync.example.com`.
     private(set) var syncURL = UserDefaults.standard.string(forKey: "syncURL") ?? ""
     private static let apiKeyAccount = "sync-api-key"
     /// Sync on launch and every `autoSyncInterval` while the app is open.

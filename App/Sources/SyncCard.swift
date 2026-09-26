@@ -72,7 +72,7 @@ struct SyncSettingsSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Server URL").foregroundStyle(.secondary)
-                TextField("https://nscramble-sync.example.workers.dev", text: $url)
+                TextField("https://sync.example.com", text: $url)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     #if os(iOS)
