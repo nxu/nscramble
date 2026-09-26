@@ -2,7 +2,6 @@ import GRDB
 
 /// Owns the local SQLite database and its schema.
 ///
-/// The schema mirrors `worker/migrations` so rows sync to D1 unchanged:
 /// UUIDv7 text ids, epoch-millisecond timestamps, and soft deletes via `deleted_at`.
 public final class AppDatabase: Sendable {
     public let writer: any DatabaseWriter

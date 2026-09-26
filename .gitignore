@@ -1,9 +1,8 @@
+!.envrc
 .DS_Store
 .build/
 .swiftpm/
 DerivedData/
 *.xcodeproj/
 xcuserdata/
-worker/node_modules/
-worker/.wrangler/
-worker/.dev.vars
+.direnv/
