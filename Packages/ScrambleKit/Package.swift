@@ -9,6 +9,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "ScrambleKit"),
-        .testTarget(name: "ScrambleKitTests", dependencies: ["ScrambleKit"]),
+        .testTarget(
+            name: "ScrambleKitTests",
+            dependencies: ["ScrambleKit"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )

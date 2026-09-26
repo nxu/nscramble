@@ -18,6 +18,7 @@
           # NoCC: keep Xcode's swift/clang/SDK instead of the nix stdenv toolchain.
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
+              bun
               just
               xcodegen
             ];

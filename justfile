@@ -12,6 +12,10 @@ test:
         (cd Packages/$p && swift test)
     done
 
+# Regenerate the cubing.js reference fixture used by ScrambleKit tests
+cubingjs-fixture:
+    cd scripts/cubingjs-fixture && bun install && bun generate.ts
+
 # Generate NScramble.xcodeproj from project.yml
 project:
     xcodegen generate
