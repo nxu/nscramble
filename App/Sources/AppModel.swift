@@ -13,6 +13,15 @@ final class AppModel {
     private(set) var lastSolve: Solve?
     private(set) var errorMessage: String?
 
+    var appearance = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
+    }
+
+    /// Compact window layout (macOS). Remembered across launches.
+    var isMiniMode = UserDefaults.standard.bool(forKey: "isMiniMode") {
+        didSet { UserDefaults.standard.set(isMiniMode, forKey: "isMiniMode") }
+    }
+
     private let database: AppDatabase
     @ObservationIgnored private var scrambler: Scrambler?
     @ObservationIgnored private var upcoming: Task<Scramble, Never>?
@@ -32,11 +41,12 @@ final class AppModel {
     /// Monotonic time, same base as NSEvent/UITouch timestamps.
     var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
-    func press() {
+    /// Key or touch down. `penalty` applies if this stops the timer (e.g. Esc records a DNF).
+    func press(penalty: Penalty = .none) {
         // Don't start a solve before there is a scramble to record.
         guard scramble != nil || timer.isRunning else { return }
         if let timeMs = timer.press(at: now) {
-            finishSolve(timeMs: timeMs)
+            finishSolve(timeMs: timeMs, penalty: penalty)
         }
     }
 
@@ -48,10 +58,10 @@ final class AppModel {
         timer.cancelHold()
     }
 
-    private func finishSolve(timeMs: Int) {
+    private func finishSolve(timeMs: Int, penalty: Penalty) {
         guard let scramble else { return }
         do {
-            lastSolve = try database.addSolve(timeMs: timeMs, scramble: scramble.description)
+            lastSolve = try database.addSolve(timeMs: timeMs, scramble: scramble.description, penalty: penalty)
         } catch {
             errorMessage = "Couldn't save the solve. \(error.localizedDescription)"
         }
@@ -59,6 +69,11 @@ final class AppModel {
     }
 
     // MARK: Last solve
+
+    /// Whether the last solve can be edited right now (not while timing).
+    var canEditLastSolve: Bool {
+        lastSolve != nil && timer.state == .idle
+    }
 
     /// Sets `penalty` on the last solve, or clears it if already set.
     func togglePenalty(_ penalty: Penalty) {

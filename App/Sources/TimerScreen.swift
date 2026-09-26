@@ -1,5 +1,6 @@
 import ScrambleKit
 import StatsKit
+import Storage
 import SwiftUI
 
 struct TimerScreen: View {
@@ -7,6 +8,9 @@ struct TimerScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focused: Bool
     @State private var touching = false
+    #if os(macOS)
+    @State private var windowController = MiniWindowController()
+    #endif
 
     private var isTiming: Bool {
         switch model.timer.state {
@@ -15,17 +19,28 @@ struct TimerScreen: View {
         }
     }
 
+    private var isMini: Bool {
+        #if os(macOS)
+        model.isMiniMode
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            scrambleView
-                .frame(maxHeight: .infinity)
-            timeView
-            footer
-                .frame(maxHeight: .infinity)
+        Group {
+            if isMini {
+                miniLayout
+            } else {
+                normalLayout
+            }
         }
-        .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        #if os(macOS)
+        // The Mac timer is keyboard-driven; the mouse moves the window (mini mode has no title bar row).
+        .gesture(WindowDragGesture())
+        #else
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -39,6 +54,7 @@ struct TimerScreen: View {
                     model.release()
                 }
         )
+        #endif
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
@@ -46,31 +62,111 @@ struct TimerScreen: View {
         .onAppear { focused = true }
         .onChange(of: scenePhase) { if scenePhase != .active { model.cancelHold() } }
         .animation(.easeOut(duration: 0.15), value: isTiming)
+        #if os(macOS)
+        .background(WindowAccessor { window in
+            windowController.window = window
+            windowController.apply(mini: model.isMiniMode, animate: false)
+        })
+        .onChange(of: model.isMiniMode) {
+            windowController.apply(mini: model.isMiniMode)
+            focused = true
+        }
+        #endif
+    }
+
+    // MARK: Layouts
+
+    private var normalLayout: some View {
+        VStack(spacing: 0) {
+            scrambleButton(fontSize: 26, lineSpacing: 6)
+                .frame(maxHeight: .infinity)
+            timeView(fontSize: 120, showsPenaltyInTime: true)
+            footer
+                .frame(maxHeight: .infinity)
+        }
+        .padding(32)
+        #if os(macOS)
+        .frame(
+            minWidth: MiniWindowController.normalMinSize.width, maxWidth: .infinity,
+            minHeight: MiniWindowController.normalMinSize.height, maxHeight: .infinity)
+        #else
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #endif
+        .overlay(alignment: .topTrailing) { appearanceButton }
+    }
+
+    /// Cycles System -> Light -> Dark.
+    private var appearanceButton: some View {
+        Button {
+            model.appearance = model.appearance.next
+            focused = true
+        } label: {
+            Image(systemName: model.appearance.symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(.tertiary)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Appearance: \(model.appearance.title)")
+        .padding(.trailing, 10)  // vertically centered on the traffic lights
+        .opacity(isTiming ? 0 : 1)
+    }
+
+    /// Fixed 400 x 200 window. The scramble is centered between the traffic lights and the top of the
+    /// time's digits; the badge is centered between the bottom of the digits and the window bottom.
+    private var miniLayout: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let height = geo.size.height
+            let timeFontSize: CGFloat = 72
+            // Digits are ~0.735 em tall and centered in the text's line box.
+            let digitsHalfHeight = timeFontSize * 0.735 / 2
+            // Low enough that two centered scramble lines clear the traffic lights.
+            let timeCenter = height * 0.59
+            let digitsTop = timeCenter - digitsHalfHeight
+            let digitsBottom = timeCenter + digitsHalfHeight
+            let trafficLightsBottom: CGFloat = 26
+
+            ZStack {
+                scrambleButton(fontSize: 18, lineSpacing: 0)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.5)
+                    .frame(width: width - 16, height: digitsTop - trafficLightsBottom)
+                    .position(x: width / 2, y: (trafficLightsBottom + digitsTop) / 2)
+                timeView(fontSize: timeFontSize, showsPenaltyInTime: false)
+                    .position(x: width / 2, y: timeCenter)
+                statusBadge
+                    .position(x: width / 2, y: (digitsBottom + height) / 2)
+            }
+        }
+        .ignoresSafeArea()
     }
 
     // MARK: Parts
 
-    private var scrambleView: some View {
+    private func scrambleButton(fontSize: CGFloat, lineSpacing: CGFloat) -> some View {
         Button {
             model.skipScramble()
             focused = true
         } label: {
             Text(model.scramble?.description ?? "…")
-                .font(.system(size: 26, design: .monospaced))
+                .font(.system(size: fontSize, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(6)
+                .lineSpacing(lineSpacing)
         }
         .buttonStyle(.plain)
         .help("New scramble")
         .opacity(isTiming ? 0 : 1)
     }
 
-    private var timeView: some View {
+    /// `showsPenaltyInTime`: render `14.34+` / `DNF` in the time itself (normal layout) instead of a badge.
+    private func timeView(fontSize: CGFloat, showsPenaltyInTime: Bool) -> some View {
         TimelineView(.animation(paused: !isTiming)) { _ in
             let now = model.now
-            Text(displayedTime(now: now))
-                .font(.system(size: 120, weight: .light, design: .monospaced))
+            Text(displayedTime(now: now, showsPenalty: showsPenaltyInTime))
+                .font(.system(size: fontSize, weight: .light, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(timeColor(now: now))
                 .strikethrough(showsDeletedSolve)
@@ -80,20 +176,44 @@ struct TimerScreen: View {
     }
 
     @ViewBuilder
+    private var statusBadge: some View {
+        if let solve = model.lastSolve, model.timer.state == .idle {
+            let (title, color) = badge(for: solve)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .overlay(Capsule().strokeBorder(color.opacity(0.6), lineWidth: 1))
+        }
+    }
+
+    private func badge(for solve: Solve) -> (String, Color) {
+        if solve.isDeleted {
+            return ("DELETED", .secondary)
+        }
+        switch solve.penalty {
+        case .none: return ("OK", .green)
+        case .plusTwo: return ("+2", .orange)
+        case .dnf: return ("DNF", .red)
+        }
+    }
+
+    @ViewBuilder
     private var footer: some View {
         VStack(spacing: 16) {
             if let solve = model.lastSolve, model.timer.state == .idle {
                 HStack(spacing: 28) {
-                    footerButton("OK", key: "1", active: solve.penalty == .none && !solve.isDeleted) {
+                    footerButton("OK", active: solve.penalty == .none && !solve.isDeleted) {
                         model.markLastSolveOK()
                     }
-                    footerButton("+2", key: "2", active: solve.penalty == .plusTwo && !solve.isDeleted) {
+                    footerButton("+2", active: solve.penalty == .plusTwo && !solve.isDeleted) {
                         model.togglePenalty(.plusTwo)
                     }
-                    footerButton("DNF", key: "3", active: solve.penalty == .dnf && !solve.isDeleted) {
+                    footerButton("DNF", active: solve.penalty == .dnf && !solve.isDeleted) {
                         model.togglePenalty(.dnf)
                     }
-                    footerButton("Delete", key: .delete, active: solve.isDeleted) {
+                    footerButton("Delete", active: solve.isDeleted) {
                         model.deleteLastSolve()
                     }
                 }
@@ -110,28 +230,30 @@ struct TimerScreen: View {
         .opacity(isTiming ? 0 : 1)
     }
 
-    private func footerButton(
-        _ title: String, key: KeyEquivalent, active: Bool, action: @escaping () -> Void
-    ) -> some View {
+    private func footerButton(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
         Button(title) {
             action()
             focused = true
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(key, modifiers: .command)
         .foregroundStyle(active ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
     }
 
     // MARK: Display
 
-    private func displayedTime(now: TimeInterval) -> String {
+    private func displayedTime(now: TimeInterval, showsPenalty: Bool) -> String {
         if let elapsed = model.timer.elapsedMilliseconds(at: now) {
             return TimeFormat.string(ms: elapsed)
         }
         if case .holding = model.timer.state {
             return TimeFormat.string(ms: 0)
         }
-        return model.lastSolve?.result.formatted ?? TimeFormat.string(ms: 0)
+        guard let result = model.lastSolve?.result else { return TimeFormat.string(ms: 0) }
+        if showsPenalty {
+            return result.formatted
+        }
+        // The badge shows the status; show the time itself (including +2).
+        return TimeFormat.string(ms: result.timeMs + (result.penalty == .plusTwo ? 2000 : 0))
     }
 
     private var showsDeletedSolve: Bool {
@@ -152,8 +274,16 @@ struct TimerScreen: View {
         let isSpace = press.key == .space
         switch press.phase {
         case .down:
-            // Any key stops a running timer; only space arms it.
-            guard isSpace || model.timer.isRunning else { return .ignored }
+            if model.timer.isRunning {
+                // Any key stops the timer; Esc records a DNF.
+                model.press(penalty: press.key == .escape ? .dnf : .none)
+                return .handled
+            }
+            if press.key == .escape, case .holding = model.timer.state {
+                model.cancelHold()
+                return .handled
+            }
+            guard isSpace else { return .ignored }
             model.press()
             return .handled
         case .repeat:

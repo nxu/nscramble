@@ -8,7 +8,9 @@ struct NScrambleApp: App {
         WindowGroup {
             TimerScreen()
                 .environment(model)
+                .appearance(model.appearance)
         }
+        .commands { AppCommands(model: model) }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 900, height: 600)
