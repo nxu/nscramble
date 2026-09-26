@@ -11,6 +11,8 @@ packages:
     path: Packages/StatsKit
   Storage:
     path: Packages/Storage
+  TimerKit:
+    path: Packages/TimerKit
 targets:
   NScramble:
     type: application
@@ -20,6 +22,7 @@ targets:
       - package: ScrambleKit
       - package: StatsKit
       - package: Storage
+      - package: TimerKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: hu.nxu.nscramble

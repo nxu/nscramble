@@ -1,5 +1,5 @@
 /// WCA penalty applied to a solve. Raw values match the `penalty` column in the database.
-public enum Penalty: Int, Sendable, CaseIterable {
+public enum Penalty: Int, Codable, Sendable, CaseIterable {
     case none = 0
     case plusTwo = 1
     case dnf = 2

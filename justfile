@@ -1,4 +1,4 @@
-packages := "ScrambleKit StatsKit Storage"
+packages := "ScrambleKit StatsKit Storage TimerKit"
 
 default:
     @just --list

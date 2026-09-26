@@ -9,9 +9,16 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
+        .package(path: "../StatsKit"),
     ],
     targets: [
-        .target(name: "Storage", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
+        .target(
+            name: "Storage",
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift"),
+                "StatsKit",
+            ]
+        ),
         .testTarget(name: "StorageTests", dependencies: ["Storage", .product(name: "GRDB", package: "GRDB.swift")]),
     ]
 )
