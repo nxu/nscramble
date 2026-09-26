@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import StatsKit
 import Testing
 @testable import Storage
 
@@ -87,4 +88,50 @@ import Testing
     let db = try AppDatabase(queue)
     let solve = try #require(try db.solves().first)
     #expect(solve.date == Solve.day(of: solve.createdAt))
+}
+
+@Test func statsSummaryUsesLocalDaysAndSkipsDeleted() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Europe/Budapest")!
+    let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 26, hour: 12))!
+    func daysAgo(_ n: Int) -> Date { calendar.date(byAdding: .day, value: -n, to: now)! }
+
+    let db = try AppDatabase.inMemory()
+    // Force day strings in the test time zone.
+    func add(_ ms: Int, _ date: Date, penalty: Penalty = .none) throws -> Solve {
+        let solve = try db.addSolve(timeMs: ms, scramble: "R", penalty: penalty, at: date)
+        try db.writer.write {
+            try $0.execute(sql: "UPDATE solves SET date = ? WHERE id = ?", arguments: [Solve.day(of: date, calendar: calendar), solve.id])
+        }
+        return solve
+    }
+    for ms in [10_000, 11_000, 12_000] { _ = try add(ms, now) }
+    let deleted = try add(1_000, now)
+    try db.deleteSolve(deleted.id)
+    _ = try add(20_000, daysAgo(6))  // still in the last 7 days
+    _ = try add(30_000, daysAgo(7))  // not in the last 7 days
+    _ = try add(40_000, daysAgo(29))  // last day of the 30-day window
+    _ = try add(50_000, daysAgo(30))  // outside
+
+    let s = try db.statsSummary(now: now, calendar: calendar)
+    #expect(s.today.count == 3)
+    #expect(s.today.average == .time(ms: 11_000))
+    #expect(s.last7Days.count == 4)
+    #expect(s.last30Days.count == 6)
+    // Newest five: 10, 11, 12 (today), 20, 30 -> trimmed to 11, 12, 20.
+    #expect(s.ao5 == .time(ms: 14_330))
+}
+
+@Test func solvesOnDayAreNewestFirstAndSkipDeleted() throws {
+    let db = try AppDatabase.inMemory()
+    let day = Date(timeIntervalSince1970: 1_790_000_000)
+    var ids: [UUID] = []
+    for i in 0..<12 {
+        ids.append(try db.addSolve(timeMs: 1_000 + i, scramble: "U", at: day.addingTimeInterval(Double(i))).id)
+    }
+    try db.addSolve(timeMs: 99, scramble: "U", at: day.addingTimeInterval(-3 * 86_400))  // other day
+    try db.deleteSolve(ids[11])
+
+    let solves = try db.solves(onDay: Solve.day(of: day), limit: 10)
+    #expect(solves.map(\.timeMs) == Array((1_001...1_010).reversed()))
 }

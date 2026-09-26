@@ -13,7 +13,7 @@ struct NScrambleApp: App {
         .commands { AppCommands(model: model) }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 900, height: 600)
+        .defaultSize(width: 1100, height: 640)
         #endif
     }
 }

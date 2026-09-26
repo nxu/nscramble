@@ -113,6 +113,17 @@ extension AppDatabase {
         }
     }
 
+    /// Non-deleted solves of one local calendar day (`YYYY-MM-DD`), newest first.
+    public func solves(onDay day: String, limit: Int? = nil) throws -> [Solve] {
+        try writer.read { db in
+            try Solve.active
+                .filter(Solve.Columns.date == day)
+                .order(Solve.Columns.createdAt.desc)
+                .limit(limit ?? -1)
+                .fetchAll(db)
+        }
+    }
+
     /// Non-deleted solves, newest first.
     public func solves(limit: Int? = nil) throws -> [Solve] {
         try writer.read { db in

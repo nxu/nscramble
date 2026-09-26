@@ -7,7 +7,7 @@ import SwiftUI
 final class MiniWindowController {
     static let miniSize = NSSize(width: 400, height: 200)
     static let normalMinSize = NSSize(width: 640, height: 420)
-    static let normalDefaultSize = NSSize(width: 900, height: 600)
+    static let normalDefaultSize = NSSize(width: 1100, height: 640)
 
     weak var window: NSWindow?
     private var normalFrame: NSRect?

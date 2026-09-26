@@ -8,6 +8,7 @@ struct TimerScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focused: Bool
     @State private var touching = false
+    @State private var layoutWidth: CGFloat = 0
     #if os(macOS)
     @State private var windowController = MiniWindowController()
     #endif
@@ -40,20 +41,6 @@ struct TimerScreen: View {
         #if os(macOS)
         // The Mac timer is keyboard-driven; the mouse moves the window (mini mode has no title bar row).
         .gesture(WindowDragGesture())
-        #else
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !touching {
-                        touching = true
-                        model.press()
-                    }
-                }
-                .onEnded { _ in
-                    touching = false
-                    model.release()
-                }
-        )
         #endif
         .focusable()
         .focused($focused)
@@ -76,23 +63,70 @@ struct TimerScreen: View {
 
     // MARK: Layouts
 
+    /// Timer area plus the stats table, shown when there's room for both.
+    static let statsPanelWidth: CGFloat = 280
+    static let minTimerWidthWithStats: CGFloat = 480
+
     private var normalLayout: some View {
-        VStack(spacing: 0) {
-            scrambleButton(fontSize: 26, lineSpacing: 6)
-                .frame(maxHeight: .infinity)
-            timeView(fontSize: 120, showsPenaltyInTime: true)
-            footer
-                .frame(maxHeight: .infinity)
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                scrambleButton(fontSize: 26, lineSpacing: 6)
+                    .frame(maxHeight: .infinity)
+                timeView(fontSize: 120, showsPenaltyInTime: true)
+                footer
+                    .frame(maxHeight: .infinity)
+            }
+            .padding(32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            #if os(iOS)
+            // Touch timer; only on the timer area so the stats table can scroll.
+            .gesture(touchTimerGesture)
+            #endif
+
+            if showsStats {
+                Divider()
+                    .ignoresSafeArea()
+                    .opacity(isTiming ? 0 : 1)
+                statsPanel
+            }
         }
-        .padding(32)
-        #if os(macOS)
-        .frame(
-            minWidth: MiniWindowController.normalMinSize.width, maxWidth: .infinity,
-            minHeight: MiniWindowController.normalMinSize.height, maxHeight: .infinity)
-        #else
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if os(macOS)
+        .frame(minWidth: MiniWindowController.normalMinSize.width, minHeight: MiniWindowController.normalMinSize.height)
         #endif
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { layoutWidth = $0 }
         .overlay(alignment: .topTrailing) { appearanceButton }
+    }
+
+    private var showsStats: Bool {
+        layoutWidth >= Self.statsPanelWidth + Self.minTimerWidthWithStats
+    }
+
+    #if os(iOS)
+    private var touchTimerGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !touching {
+                    touching = true
+                    model.press()
+                }
+            }
+            .onEnded { _ in
+                touching = false
+                model.release()
+            }
+    }
+    #endif
+
+    private var statsPanel: some View {
+        TimelineView(.everyMinute) { context in
+            StatsPanel(stats: model.stats, recentSolves: model.todaysRecentSolves, date: context.date)
+                // Recompute when the day changes (and on first appearance).
+                .task(id: Solve.day(of: context.date)) { model.refreshStats() }
+        }
+        .frame(width: Self.statsPanelWidth)
+        .opacity(isTiming ? 0 : 1)
     }
 
     /// Cycles System -> Light -> Dark.

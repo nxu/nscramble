@@ -20,7 +20,7 @@ public struct Solve: Codable, Hashable, Identifiable, Sendable {
     public var isDeleted: Bool { deletedAt != nil }
 
     /// `YYYY-MM-DD` in the current time zone.
-    static func day(of date: Date, calendar: Calendar = .current) -> String {
+    public static func day(of date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
     }
@@ -36,6 +36,7 @@ extension Solve: FetchableRecord, PersistableRecord {
     public enum Columns {
         public static let createdAt = Column("created_at")
         public static let deletedAt = Column("deleted_at")
+        public static let date = Column("date")
     }
 
     public static let databaseColumnEncodingStrategy = DatabaseColumnEncodingStrategy.convertToSnakeCase

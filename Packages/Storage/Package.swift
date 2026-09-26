@@ -19,6 +19,6 @@ let package = Package(
                 "StatsKit",
             ]
         ),
-        .testTarget(name: "StorageTests", dependencies: ["Storage", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "StorageTests", dependencies: ["Storage", "StatsKit", .product(name: "GRDB", package: "GRDB.swift")]),
     ]
 )

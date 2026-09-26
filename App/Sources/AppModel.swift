@@ -11,6 +11,9 @@ final class AppModel {
     private(set) var scramble: Scramble?
     private(set) var timer = SpeedTimer()
     private(set) var lastSolve: Solve?
+    private(set) var stats: StatsSummary?
+    /// Up to 10 most recent solves of today, newest first.
+    private(set) var todaysRecentSolves: [Solve] = []
     private(set) var errorMessage: String?
 
     var appearance = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system {
@@ -62,10 +65,22 @@ final class AppModel {
         guard let scramble else { return }
         do {
             lastSolve = try database.addSolve(timeMs: timeMs, scramble: scramble.description, penalty: penalty)
+            refreshStats()
         } catch {
             errorMessage = "Couldn't save the solve. \(error.localizedDescription)"
         }
         Task { await advanceScramble() }
+    }
+
+    // MARK: Stats
+
+    func refreshStats() {
+        do {
+            stats = try database.statsSummary()
+            todaysRecentSolves = try database.solves(onDay: Solve.day(of: Date()), limit: 10)
+        } catch {
+            errorMessage = "Couldn't load statistics. \(error.localizedDescription)"
+        }
     }
 
     // MARK: Last solve
@@ -80,6 +95,7 @@ final class AppModel {
         guard let solve = lastSolve else { return }
         do {
             lastSolve = try database.setPenalty(solve.penalty == penalty ? .none : penalty, forSolve: solve.id)
+            refreshStats()
         } catch {
             errorMessage = "Couldn't update the solve. \(error.localizedDescription)"
         }
@@ -90,6 +106,7 @@ final class AppModel {
         guard let solve = lastSolve else { return }
         do {
             lastSolve = try database.markOK(solve.id)
+            refreshStats()
         } catch {
             errorMessage = "Couldn't update the solve. \(error.localizedDescription)"
         }
@@ -100,6 +117,7 @@ final class AppModel {
         guard let solve = lastSolve else { return }
         do {
             lastSolve = try database.deleteSolve(solve.id)
+            refreshStats()
         } catch {
             errorMessage = "Couldn't delete the solve. \(error.localizedDescription)"
         }
