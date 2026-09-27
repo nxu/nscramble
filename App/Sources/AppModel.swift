@@ -28,11 +28,14 @@ final class AppModel {
     /// Base URL of the sync server, e.g. `https://sync.example.com`.
     private(set) var syncURL = UserDefaults.standard.string(forKey: "syncURL") ?? ""
     private static let apiKeyAccount = "sync-api-key"
-    /// Sync on launch and every `autoSyncInterval` while the app is open.
+    /// Sync on launch, every `autoSyncInterval` while the app is open, and after every `autoSyncSolveCount` solves.
     var autoSync = UserDefaults.standard.object(forKey: "autoSync") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoSync, forKey: "autoSync") }
     }
-    static let autoSyncInterval = Duration.seconds(2 * 60 * 60)
+    static let autoSyncInterval = Duration.seconds(60 * 60)
+    static let autoSyncSolveCount = 10
+    /// Solves recorded since the last sync (manual or automatic).
+    @ObservationIgnored private var solvesSinceSync = 0
 
     var appearance = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "appearance") }
@@ -85,6 +88,10 @@ final class AppModel {
         do {
             lastSolve = try database.addSolve(timeMs: timeMs, scramble: scramble.description, penalty: penalty)
             refreshStats()
+            solvesSinceSync += 1
+            if solvesSinceSync >= Self.autoSyncSolveCount && autoSync && isSyncConfigured {
+                Task { await syncNow() }
+            }
         } catch {
             errorMessage = "Couldn't save the solve. \(error.localizedDescription)"
         }
@@ -98,6 +105,7 @@ final class AppModel {
     }
 
     /// Syncs at launch, then every `autoSyncInterval`, when enabled and configured.
+    /// (The every-N-solves trigger is in `finishSolve`.)
     private func runAutoSync() async {
         while !Task.isCancelled {
             if autoSync && isSyncConfigured {
@@ -114,8 +122,10 @@ final class AppModel {
             return
         }
         syncStatus = .syncing
+        solvesSinceSync = 0
         do {
-            try await database.sync(using: HTTPSyncTransport(baseURL: url, apiKey: apiKey))
+            let transport = HTTPSyncTransport(baseURL: url, apiKey: apiKey)
+            try await database.sync(using: transport, serverID: transport.serverID)
             syncStatus = .synced(Date())
             refreshStats()
             if let id = lastSolve?.id {

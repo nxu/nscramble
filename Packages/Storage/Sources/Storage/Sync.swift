@@ -104,6 +104,18 @@ public struct HTTPSyncTransport: SyncTransport {
         self.session = session
     }
 
+    /// The server's identity for `AppDatabase.sync(using:serverID:)`: the base URL without a trailing
+    /// slash and with a lowercase scheme and host, so trivially different spellings count as one server.
+    public var serverID: String {
+        var string = baseURL.absoluteString
+        if var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) {
+            components.scheme = components.scheme?.lowercased()
+            components.host = components.host?.lowercased()
+            string = components.string ?? string
+        }
+        return string.hasSuffix("/") ? String(string.dropLast()) : string
+    }
+
     public func send(_ request: SyncRequest) async throws -> SyncResponse {
         var urlRequest = URLRequest(url: baseURL.appending(path: "sync"))
         urlRequest.httpMethod = "POST"
@@ -140,8 +152,12 @@ public struct SyncResult: Equatable, Sendable {
 extension AppDatabase {
     /// Pushes local changes and pulls remote ones until both sides are up to date.
     /// Conflicts resolve by last write wins (`updated_at`), on the server and locally.
+    ///
+    /// `serverID` identifies the server (e.g. its URL). Sync state belongs to one server: syncing with a
+    /// different one starts over, pushing every solve and pulling from the beginning.
     @discardableResult
-    public func sync(using transport: some SyncTransport, batchSize: Int = 200) async throws -> SyncResult {
+    public func sync(using transport: some SyncTransport, serverID: String, batchSize: Int = 200) async throws -> SyncResult {
+        try await writer.write { try Self.switchServer(to: serverID, $0) }
         var result = SyncResult(pushed: 0, pulled: 0)
         while true {
             let (pending, since) = try await writer.read { db in
@@ -156,6 +172,15 @@ extension AppDatabase {
                 return result
             }
         }
+    }
+
+    /// Resets the sync state if it belongs to a different server (or none yet).
+    static func switchServer(to serverID: String, _ db: Database) throws {
+        let current = try String.fetchOne(db, sql: "SELECT value FROM sync_state WHERE key = 'server'")
+        guard current != serverID else { return }
+        try db.execute(sql: "UPDATE solves SET needs_push = 1")
+        try db.execute(sql: "DELETE FROM sync_state")
+        try db.execute(sql: "INSERT INTO sync_state (key, value) VALUES ('server', ?)", arguments: [serverID])
     }
 
     static func pendingSyncSolves(_ db: Database, limit: Int) throws -> [SyncSolve] {

@@ -34,6 +34,7 @@ build-ipad: project
 # Build and run the macOS app
 run-mac: build-mac
     -osascript -e 'quit app "NScramble"' 2>/dev/null
+    sleep 1
     open DerivedData/Build/Products/Debug/NScramble.app
 
 # Build and run the app on an iOS simulator (default: the iPad one)

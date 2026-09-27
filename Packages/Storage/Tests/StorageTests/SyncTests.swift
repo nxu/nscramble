@@ -41,18 +41,18 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     let a = try mac.addSolve(timeMs: 12_345, scramble: "R U")
     let b = try mac.addSolve(timeMs: 9_876, scramble: "F2")
     #expect(try mac.pendingSyncCount() == 2)
-    #expect(try await mac.sync(using: server) == SyncResult(pushed: 2, pulled: 0))
+    #expect(try await mac.sync(using: server, serverID: "test") == SyncResult(pushed: 2, pulled: 0))
     #expect(try mac.pendingSyncCount() == 0)
 
-    #expect(try await ipad.sync(using: server) == SyncResult(pushed: 0, pulled: 2))
+    #expect(try await ipad.sync(using: server, serverID: "test") == SyncResult(pushed: 0, pulled: 2))
     #expect(try ipad.solves() == mac.solves())
 
     // Edits and deletes flow back.
     try await Task.sleep(for: .milliseconds(2))
     try ipad.setPenalty(.dnf, forSolve: a.id)
     try ipad.deleteSolve(b.id)
-    try await ipad.sync(using: server)
-    #expect(try await mac.sync(using: server) == SyncResult(pushed: 0, pulled: 2))
+    try await ipad.sync(using: server, serverID: "test")
+    #expect(try await mac.sync(using: server, serverID: "test") == SyncResult(pushed: 0, pulled: 2))
     #expect(try mac.solves().map(\.penalty) == [.dnf])
     #expect(try mac.solves() == ipad.solves())
     #expect(try mac.pendingSyncCount() == 0)
@@ -63,14 +63,14 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     let mac = try AppDatabase.inMemory()
     let ipad = try AppDatabase.inMemory()
     let solve = try mac.addSolve(timeMs: 10_000, scramble: "U", at: Date(timeIntervalSince1970: 100))
-    try await mac.sync(using: server)
-    try await ipad.sync(using: server)
+    try await mac.sync(using: server, serverID: "test")
+    try await ipad.sync(using: server, serverID: "test")
 
     try mac.setPenalty(.plusTwo, forSolve: solve.id, at: Date(timeIntervalSince1970: 200))
     try ipad.setPenalty(.dnf, forSolve: solve.id, at: Date(timeIntervalSince1970: 300))
-    try await mac.sync(using: server)
-    try await ipad.sync(using: server)  // newer: wins on the server
-    try await mac.sync(using: server)
+    try await mac.sync(using: server, serverID: "test")
+    try await ipad.sync(using: server, serverID: "test")  // newer: wins on the server
+    try await mac.sync(using: server, serverID: "test")
 
     #expect(try mac.solves().first?.penalty == .dnf)
     #expect(try ipad.solves().first?.penalty == .dnf)
@@ -83,11 +83,11 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     server.beforeResponding = {
         try mac.setPenalty(.dnf, forSolve: solve.id, at: Date(timeIntervalSince1970: 200))
     }
-    try await mac.sync(using: server)
+    try await mac.sync(using: server, serverID: "test")
     #expect(try mac.pendingSyncCount() == 1)
 
     server.beforeResponding = nil
-    try await mac.sync(using: server)
+    try await mac.sync(using: server, serverID: "test")
     #expect(try mac.pendingSyncCount() == 0)
     #expect(try mac.solves().first?.penalty == .dnf)
 }
@@ -99,9 +99,9 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     for i in 0..<25 {
         try mac.addSolve(timeMs: i, scramble: "U", at: Date(timeIntervalSince1970: Double(i)))
     }
-    #expect(try await mac.sync(using: server, batchSize: 10) == SyncResult(pushed: 25, pulled: 0))
+    #expect(try await mac.sync(using: server, serverID: "test", batchSize: 10) == SyncResult(pushed: 25, pulled: 0))
     #expect(server.storedCount == 25)
-    #expect(try await ipad.sync(using: server) == SyncResult(pushed: 0, pulled: 25))
+    #expect(try await ipad.sync(using: server, serverID: "test") == SyncResult(pushed: 0, pulled: 25))
     #expect(try ipad.solves().count == 25)
 }
 
@@ -113,12 +113,12 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     for t in [1_790_000_000.1234567, 1_790_000_000.123, 1_790_000_000.9999, 0.001] {
         try mac.addSolve(timeMs: 1, scramble: "U", at: Date(timeIntervalSince1970: t))
     }
-    try await mac.sync(using: server)
-    try await ipad.sync(using: server)
+    try await mac.sync(using: server, serverID: "test")
+    try await ipad.sync(using: server, serverID: "test")
     #expect(try ipad.solves() == mac.solves())
     // Nothing looks newer on either side, so a second round moves nothing.
-    #expect(try await mac.sync(using: server) == SyncResult(pushed: 0, pulled: 0))
-    #expect(try await ipad.sync(using: server) == SyncResult(pushed: 0, pulled: 0))
+    #expect(try await mac.sync(using: server, serverID: "test") == SyncResult(pushed: 0, pulled: 0))
+    #expect(try await ipad.sync(using: server, serverID: "test") == SyncResult(pushed: 0, pulled: 0))
 }
 
 @Test func rejectedAPIKeySurfacesAsUnauthorized() async throws {
@@ -127,7 +127,7 @@ final class FakeSyncServer: SyncTransport, @unchecked Sendable {
     }
     let mac = try AppDatabase.inMemory()
     try mac.addSolve(timeMs: 1, scramble: "U")
-    await #expect(throws: SyncError.unauthorized) { try await mac.sync(using: Rejecting()) }
+    await #expect(throws: SyncError.unauthorized) { try await mac.sync(using: Rejecting(), serverID: "test") }
     #expect(try mac.pendingSyncCount() == 1)
 }
 
@@ -141,16 +141,48 @@ func liveServer() async throws {
     let mac = try AppDatabase.inMemory()
     let ipad = try AppDatabase.inMemory()
     let solve = try mac.addSolve(timeMs: 12_345, scramble: "R U R' U'")
-    try await mac.sync(using: transport)
-    try await ipad.sync(using: transport)
+    try await mac.sync(using: transport, serverID: transport.serverID)
+    try await ipad.sync(using: transport, serverID: transport.serverID)
     #expect(try ipad.solves().contains(solve))
 
     try await Task.sleep(for: .milliseconds(2))
     try ipad.setPenalty(.plusTwo, forSolve: solve.id)
-    try await ipad.sync(using: transport)
-    try await mac.sync(using: transport)
+    try await ipad.sync(using: transport, serverID: transport.serverID)
+    try await mac.sync(using: transport, serverID: transport.serverID)
     #expect(try mac.solves().first { $0.id == solve.id }?.penalty == .plusTwo)
 
     let wrongKey = HTTPSyncTransport(baseURL: url, apiKey: "wrong")
-    await #expect(throws: SyncError.unauthorized) { try await mac.sync(using: wrongKey) }
+    await #expect(throws: SyncError.unauthorized) { try await mac.sync(using: wrongKey, serverID: transport.serverID) }
+}
+
+@Test func switchingServersStartsOver() async throws {
+    let first = FakeSyncServer()
+    let second = FakeSyncServer()
+    let mac = try AppDatabase.inMemory()
+    for i in 0..<3 {
+        try mac.addSolve(timeMs: 1_000 + i, scramble: "U", at: Date(timeIntervalSince1970: Double(i)))
+    }
+    #expect(try await mac.sync(using: first, serverID: "first") == SyncResult(pushed: 3, pulled: 0))
+    #expect(try await mac.sync(using: first, serverID: "first") == SyncResult(pushed: 0, pulled: 0))
+
+    // A new server gets everything, even though the solves were already pushed to the first one.
+    #expect(try await mac.sync(using: second, serverID: "second") == SyncResult(pushed: 3, pulled: 0))
+    #expect(second.storedCount == 3)
+
+    // Solves added on the second server's side come down, and switching back pushes everything again.
+    let ipad = try AppDatabase.inMemory()
+    try ipad.addSolve(timeMs: 9_999, scramble: "R", at: Date(timeIntervalSince1970: 10))
+    try await ipad.sync(using: second, serverID: "second")
+    #expect(try await mac.sync(using: second, serverID: "second") == SyncResult(pushed: 0, pulled: 1))
+    #expect(try await mac.sync(using: first, serverID: "first") == SyncResult(pushed: 4, pulled: 0))
+    #expect(first.storedCount == 4)
+}
+
+@Test func serverIDIgnoresTrailingSlashAndCase() {
+    let a = HTTPSyncTransport(baseURL: URL(string: "HTTP://LocalHost:8788/")!, apiKey: "k")
+    let b = HTTPSyncTransport(baseURL: URL(string: "http://localhost:8788")!, apiKey: "k")
+    let c = HTTPSyncTransport(baseURL: URL(string: "https://sync.example.com")!, apiKey: "k")
+    #expect(a.serverID == "http://localhost:8788")
+    #expect(a.serverID == b.serverID)
+    #expect(a.serverID != c.serverID)
 }
