@@ -53,14 +53,6 @@ public struct SyncSolve: Codable, Equatable, Sendable {
         try c.encode(updated_at, forKey: .updated_at)
         try c.encode(deleted_at, forKey: .deleted_at)
     }
-
-    /// Nil if the server sent something this app can't store.
-    var solve: Solve? {
-        guard let id = UUID(uuidString: id), let penalty = Penalty(rawValue: penalty) else { return nil }
-        return Solve(
-            id: id, createdAt: Date(milliseconds: created_at), date: date, timeMs: time_ms, scramble: scramble,
-            penalty: penalty, updatedAt: Date(milliseconds: updated_at), deletedAt: deleted_at.map(Date.init(milliseconds:)))
-    }
 }
 
 public struct SyncRequest: Codable, Sendable {
@@ -156,7 +148,7 @@ extension AppDatabase {
     /// `serverID` identifies the server (e.g. its URL). Sync state belongs to one server: syncing with a
     /// different one starts over, pushing every solve and pulling from the beginning.
     @discardableResult
-    public func sync(using transport: some SyncTransport, serverID: String, batchSize: Int = 200) async throws -> SyncResult {
+    public func sync(using transport: some SyncTransport, serverID: String, batchSize: Int = 500) async throws -> SyncResult {
         try await writer.write { try Self.switchServer(to: serverID, $0) }
         var result = SyncResult(pushed: 0, pulled: 0)
         while true {
@@ -184,7 +176,9 @@ extension AppDatabase {
     }
 
     static func pendingSyncSolves(_ db: Database, limit: Int) throws -> [SyncSolve] {
-        try Solve.fetchAll(db, sql: "SELECT * FROM solves WHERE needs_push = 1 ORDER BY updated_at LIMIT ?", arguments: [limit])
+        // No ORDER BY: push order doesn't matter, and sorting every pending solve per batch is quadratic
+        // when there are many (e.g. the first sync with a new server).
+        try Solve.fetchAll(db, sql: "SELECT * FROM solves WHERE needs_push = 1 LIMIT ?", arguments: [limit])
             .map(SyncSolve.init)
     }
 
@@ -195,24 +189,30 @@ extension AppDatabase {
     /// Returns the number of solves changed locally.
     static func apply(_ response: SyncResponse, pushed: [SyncSolve], _ db: Database) throws -> Int {
         // Accepted pushes are clean, unless edited again while the request was in flight.
+        let markPushed = try db.cachedStatement(sql: "UPDATE solves SET needs_push = 0 WHERE id = ? AND updated_at = ?")
         for solve in pushed {
-            try db.execute(
-                sql: "UPDATE solves SET needs_push = 0 WHERE id = ? AND updated_at = ?",
-                arguments: [solve.id, solve.updated_at])
+            try markPushed.execute(arguments: [solve.id, solve.updated_at])
         }
 
+        // Insert new solves; replace ours only with a newer edit (so our own pushes coming back are no-ops).
+        let upsert = try db.cachedStatement(sql: """
+            INSERT INTO solves (id, created_at, date, time_ms, scramble, penalty, updated_at, deleted_at, needs_push)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+            ON CONFLICT (id) DO UPDATE SET
+                created_at = excluded.created_at, date = excluded.date, time_ms = excluded.time_ms,
+                scramble = excluded.scramble, penalty = excluded.penalty, updated_at = excluded.updated_at,
+                deleted_at = excluded.deleted_at, needs_push = 0
+            WHERE excluded.updated_at > solves.updated_at
+            """)
         var changed = 0
         for remote in response.changes {
-            guard let solve = remote.solve else { continue }
-            if let local = try Solve.fetchOne(db, key: solve.id) {
-                // Same or older than ours (including our own pushes coming back): keep ours.
-                guard solve.updatedAt > local.updatedAt else { continue }
-                try solve.update(db)
-            } else {
-                try solve.insert(db)
-            }
-            try db.execute(sql: "UPDATE solves SET needs_push = 0 WHERE id = ?", arguments: [remote.id])
-            changed += 1
+            // Skip anything this app can't store.
+            guard let id = UUID(uuidString: remote.id), Penalty(rawValue: remote.penalty) != nil else { continue }
+            try upsert.execute(arguments: [
+                id.databaseString, remote.created_at, remote.date, remote.time_ms, remote.scramble,
+                remote.penalty, remote.updated_at, remote.deleted_at,
+            ])
+            changed += db.changesCount
         }
 
         try db.execute(

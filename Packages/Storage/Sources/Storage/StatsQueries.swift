@@ -9,14 +9,22 @@ extension AppDatabase {
         let weekStart = Solve.day(of: calendar.date(byAdding: .day, value: -6, to: now)!, calendar: calendar)
         let monthStart = Solve.day(of: calendar.date(byAdding: .day, value: -29, to: now)!, calendar: calendar)
 
+        // Runs after every solve: read just the columns the stats need, not whole solves.
+        func result(_ row: Row) -> SolveResult {
+            SolveResult(timeMs: row["time_ms"], penalty: Penalty(rawValue: row["penalty"]) ?? .none)
+        }
         let (month, recent) = try writer.read { db in
-            let month = try Solve.active.filter(Solve.Columns.date >= monthStart).fetchAll(db)
-            let recent = try Solve.active.order(Solve.Columns.createdAt.desc).limit(100).fetchAll(db)
+            let month = try Row.fetchAll(db, sql: """
+                SELECT date, time_ms, penalty FROM solves WHERE deleted_at IS NULL AND date >= ?
+                """, arguments: [monthStart])
+            let recent = try Row.fetchAll(db, sql: """
+                SELECT time_ms, penalty FROM solves WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100
+                """)
             return (month, recent)
         }
         return StatsSummary(
-            dated: month.map { (day: $0.date, result: $0.result) },
-            newestFirst: recent.map(\.result),
+            dated: month.map { (day: $0["date"], result: result($0)) },
+            newestFirst: recent.map(result),
             today: today, weekStart: weekStart, monthStart: monthStart)
     }
 }
