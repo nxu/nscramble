@@ -19,6 +19,10 @@ test:
 cubingjs-fixture:
     cd scripts/cubingjs-fixture && bun install && bun generate.ts
 
+# Redraw the app icon (scripts/app-icon.swift) into the asset catalog
+app-icon:
+    swift scripts/app-icon.swift App/Resources/Assets.xcassets/AppIcon.appiconset
+
 # Generate NScramble.xcodeproj from project.yml
 project:
     xcodegen generate
@@ -35,6 +39,8 @@ build-ipad: project
 run-mac: build-mac
     -osascript -e 'quit app "NScramble"' 2>/dev/null
     sleep 1
+    @# Refresh Launch Services so the Dock picks up a changed icon.
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f DerivedData/Build/Products/Debug/NScramble.app
     open DerivedData/Build/Products/Debug/NScramble.app
 
 # Build and run the app on an iOS simulator (default: the iPad one)
