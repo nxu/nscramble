@@ -114,10 +114,10 @@ import Testing
     _ = try add(50_000, daysAgo(30))  // outside
 
     let s = try db.statsSummary(now: now, calendar: calendar)
-    #expect(s.today.count == 3)
-    #expect(s.today.average == .time(ms: 11_000))
-    #expect(s.last7Days.count == 4)
-    #expect(s.last30Days.count == 6)
+    // Each average differs depending on which solves the period includes.
+    #expect(s.today == .time(ms: 11_000))  // 10, 11, 12 (the deleted 1.00 would give 10.50)
+    #expect(s.last7Days == .time(ms: 11_500))  // + 20 from 6 days ago (30 from 7 days ago would give 14.33)
+    #expect(s.last30Days == .time(ms: 18_250))  // + 30, 40 -> 11, 12, 20, 30 (50 from 30 days ago would give 22.60)
     // Newest five: 10, 11, 12 (today), 20, 30 -> trimmed to 11, 12, 20.
     #expect(s.ao5 == .time(ms: 14_330))
 }
@@ -132,6 +132,6 @@ import Testing
     try db.addSolve(timeMs: 99, scramble: "U", at: day.addingTimeInterval(-3 * 86_400))  // other day
     try db.deleteSolve(ids[11])
 
-    let solves = try db.solves(onDay: Solve.day(of: day), limit: 10)
-    #expect(solves.map(\.timeMs) == Array((1_001...1_010).reversed()))
+    let solves = try db.solves(onDay: Solve.day(of: day))
+    #expect(solves.map(\.timeMs) == Array((1_000...1_010).reversed()))
 }

@@ -2,10 +2,11 @@ import StatsKit
 import Storage
 import SwiftUI
 
-/// Side table: today's date, period averages/means and the current ao5/ao12/ao100.
+/// Side table: today's date, period averages, ao5/ao12/ao100, and all of today's solves.
 struct StatsPanel: View {
     let stats: StatsSummary?
-    let recentSolves: [Solve]
+    /// Today's solves, newest first.
+    let todaysSolves: [Solve]
     let date: Date
 
     var body: some View {
@@ -19,28 +20,38 @@ struct StatsPanel: View {
         }
     }
 
+    /// One grid for everything, so today's solves line up with the stats columns.
     private var content: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Grid(alignment: .trailing, horizontalSpacing: 20, verticalSpacing: 10) {
             Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
-                .foregroundStyle(.secondary)
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .center)
+            separator
 
-            Grid(alignment: .trailing, horizontalSpacing: 20, verticalSpacing: 10) {
-                GridRow {
-                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
-                    header("avg")
-                    header("mean")
-                }
-                periodRow("today", stats?.today)
-                periodRow("7 days", stats?.last7Days)
-                periodRow("30 days", stats?.last30Days)
-                Color.clear.frame(height: 14).gridCellUnsizedAxes(.horizontal)
-                statRow("ao5", stats?.ao5)
-                statRow("ao12", stats?.ao12)
-                statRow("ao100", stats?.ao100)
+            GridRow {
+                Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                header("avg")
             }
+            statRow("today", stats?.today)
+            statRow("7 days", stats?.last7Days)
+            statRow("30 days", stats?.last30Days)
+            Color.clear.frame(height: 14).gridCellUnsizedAxes(.horizontal)
+            statRow("ao5", stats?.ao5)
+            statRow("ao12", stats?.ao12)
+            statRow("ao100", stats?.ao100)
 
-            if !recentSolves.isEmpty {
-                recentSolvesList
+            if !todaysSolves.isEmpty {
+                separator
+                header("Today's scrambles")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(todaysSolves) { solve in
+                    GridRow {
+                        Text(solve.createdAt, format: .dateTime.hour().minute())
+                            .foregroundStyle(.tertiary)
+                            .gridColumnAlignment(.leading)
+                        Text(solve.result.formatted)
+                    }
+                }
             }
         }
         .font(.system(size: 15, design: .monospaced))
@@ -48,54 +59,33 @@ struct StatsPanel: View {
         .padding(28)
     }
 
-    /// Today's latest solves, in smaller type.
-    private var recentSolvesList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("today's last \(recentSolves.count)")
-                .foregroundStyle(.tertiary)
-            Grid(alignment: .trailing, horizontalSpacing: 20, verticalSpacing: 5) {
-                ForEach(recentSolves) { solve in
-                    GridRow {
-                        Text(solve.createdAt, format: .dateTime.hour().minute())
-                            .foregroundStyle(.tertiary)
-                            .gridColumnAlignment(.leading)
-                        Text(solve.result.formatted)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .font(.system(size: 12, design: .monospaced))
+    /// Thin line spanning the grid, between the date, the stats and the solve list.
+    private var separator: some View {
+        Divider()
+            .gridCellUnsizedAxes(.horizontal)
+            .padding(.vertical, 8)
     }
 
     private func header(_ title: String) -> some View {
         Text(title).foregroundStyle(.tertiary)
     }
 
+    /// The label column takes the spare width, pushing the values to the right edge.
     private func label(_ title: String) -> some View {
         Text(title)
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .gridColumnAlignment(.leading)
     }
 
-    private func periodRow(_ title: String, _ period: PeriodStats?) -> some View {
-        GridRow {
-            label(title)
-            Text((period?.average ?? .none).formatted)
-            Text((period?.mean ?? .none).formatted)
-        }
-    }
-
-    /// Rolling averages go in the "avg" column.
     private func statRow(_ title: String, _ stat: Stat?) -> some View {
         GridRow {
             label(title)
             Text((stat ?? .none).formatted)
-            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
         }
     }
 }
 
 #Preview {
-    StatsPanel(stats: nil, recentSolves: [], date: .now)
+    StatsPanel(stats: nil, todaysSolves: [], date: .now)
 }

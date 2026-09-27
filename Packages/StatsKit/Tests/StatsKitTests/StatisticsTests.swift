@@ -51,11 +51,6 @@ private let dnf = SolveResult(timeMs: 5_000, penalty: .dnf)
     #expect(Statistics.averageOf(12, newestFirst) == .none)
 }
 
-@Test func meanExcludesDNFs() {
-    #expect(Statistics.mean([r(10_000), r(12_000), dnf]) == .time(ms: 11_000))
-    #expect(Statistics.mean([dnf]) == .dnf)
-    #expect(Statistics.mean([]) == .none)
-}
 
 @Test func summaryPeriods() {
     let dated: [(day: String, result: SolveResult)] = [
@@ -66,11 +61,10 @@ private let dnf = SolveResult(timeMs: 5_000, penalty: .dnf)
     let s = StatsSummary(
         dated: dated, newestFirst: dated.map(\.result),
         today: "2026-09-26", weekStart: "2026-09-20", monthStart: "2026-08-28")
-    #expect(s.today.count == 3)
-    #expect(s.today.average == .time(ms: 11_000))
-    #expect(s.last7Days.count == 4)
-    #expect(s.last7Days.mean == .time(ms: 13_250))
-    #expect(s.last30Days.count == 5)
+    // Each period's average differs depending on which solves it includes.
+    #expect(s.today == .time(ms: 11_000))  // 10, 11, 12
+    #expect(s.last7Days == .time(ms: 11_500))  // 10, 11, 12, 20 -> 11, 12
+    #expect(s.last30Days == .time(ms: 14_330))  // 10, 11, 12, 20, 30 -> 11, 12, 20
     #expect(s.ao5 == .time(ms: 14_330))  // 11, 12, 20
     #expect(s.ao12 == .none)
 }

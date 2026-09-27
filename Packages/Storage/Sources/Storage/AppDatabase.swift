@@ -128,12 +128,11 @@ extension AppDatabase {
     }
 
     /// Non-deleted solves of one local calendar day (`YYYY-MM-DD`), newest first.
-    public func solves(onDay day: String, limit: Int? = nil) throws -> [Solve] {
+    public func solves(onDay day: String) throws -> [Solve] {
         try writer.read { db in
             try Solve.active
                 .filter(Solve.Columns.date == day)
                 .order(Solve.Columns.createdAt.desc)
-                .limit(limit ?? -1)
                 .fetchAll(db)
         }
     }
@@ -142,12 +141,6 @@ extension AppDatabase {
         try writer.read { try Solve.fetchOne($0, key: id) }
     }
 
-    /// Non-deleted solves, newest first.
-    public func solves(limit: Int? = nil) throws -> [Solve] {
-        try writer.read { db in
-            try Solve.active.order(Solve.Columns.createdAt.desc).limit(limit ?? -1).fetchAll(db)
-        }
-    }
 }
 
 extension Date {

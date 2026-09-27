@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Bottom of the stats sidebar: "Sync now", status, and access to the sync settings.
 struct SyncCard: View {
+    /// The sidebar separates the card from the stats above it; the Sync tab doesn't need that.
+    var showsTopDivider = true
+
     @Environment(AppModel.self) private var model
     @State private var showingSettings = false
 
@@ -31,7 +34,11 @@ struct SyncCard: View {
             .font(.system(size: 11, design: .monospaced))
         }
         .padding(20)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) {
+            if showsTopDivider {
+                Divider()
+            }
+        }
         .sheet(isPresented: $showingSettings) {
             SyncSettingsSheet()
         }

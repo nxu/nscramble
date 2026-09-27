@@ -158,11 +158,6 @@ extension AppDatabase {
         }
     }
 
-    /// Local changes not yet accepted by the server.
-    public func pendingSyncCount() throws -> Int {
-        try writer.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM solves WHERE needs_push = 1") ?? 0 }
-    }
-
     static func pendingSyncSolves(_ db: Database, limit: Int) throws -> [SyncSolve] {
         try Solve.fetchAll(db, sql: "SELECT * FROM solves WHERE needs_push = 1 ORDER BY updated_at LIMIT ?", arguments: [limit])
             .map(SyncSolve.init)

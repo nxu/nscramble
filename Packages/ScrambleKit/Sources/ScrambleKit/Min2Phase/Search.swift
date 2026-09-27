@@ -111,10 +111,8 @@ final class Search {
     var valid1 = 0
     var allowShorter = false
     var urfCubieCube = [CubieCube](repeating: CubieCube(), count: 6)
-    var urfCoordCube = [CoordCube](repeating: CoordCube(), count: 6)
     var phase1Cubie = [CubieCube](repeating: CubieCube(), count: 21)
 
-    var preMoveCubes = [CubieCube](repeating: CubieCube(), count: maxPreMoves + 1)
     var preMoves = [Int](repeating: 0, count: maxPreMoves)
     var preMoveLen = 0
     var maxPreMoves = 0
@@ -157,7 +155,6 @@ final class Search {
 
         for i in 0..<6 {
             urfCubieCube[i] = cc
-            _ = t.setWithPrun(&urfCoordCube[i], cc, 20)
             cc.urfConjugate()
             if i % 3 == 2 {
                 cc.invert()
@@ -220,7 +217,6 @@ final class Search {
             var pc = CubieCube()
             CubieCube.cornMult(CubieCube.moveCube[m], cc, &pc)
             CubieCube.edgeMult(CubieCube.moveCube[m], cc, &pc)
-            preMoveCubes[maxl] = pc
             preMoves[maxPreMoves - maxl] = m
             let ret = phase1PreMoves(maxl - 1, m, pc, ssym & Int(truncatingIfNeeded: t.moveCubeSym[m]))
             if ret == 0 {

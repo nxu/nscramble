@@ -35,36 +35,17 @@ public enum Statistics {
         return average(Array(newestFirst.prefix(count)))
     }
 
-    /// Arithmetic mean of the non-DNF results. Rounded to centiseconds.
-    public static func mean(_ results: [SolveResult]) -> Stat {
-        let times = results.compactMap(\.effectiveMs)
-        guard !times.isEmpty else { return results.isEmpty ? .none : .dnf }
-        return .time(ms: roundedToCentiseconds(Double(times.reduce(0, +)) / Double(times.count)))
-    }
-
     static func roundedToCentiseconds(_ ms: Double) -> Int {
         Int((ms / 10).rounded()) * 10
     }
 }
 
-/// Average and mean over a period.
-public struct PeriodStats: Equatable, Sendable {
-    public let count: Int
-    public let average: Stat
-    public let mean: Stat
-
-    public init(_ results: [SolveResult]) {
-        count = results.count
-        average = Statistics.average(results)
-        mean = Statistics.mean(results)
-    }
-}
-
 /// Everything the stats panel shows.
 public struct StatsSummary: Equatable, Sendable {
-    public let today: PeriodStats
-    public let last7Days: PeriodStats
-    public let last30Days: PeriodStats
+    /// Averages of all solves in each period.
+    public let today: Stat
+    public let last7Days: Stat
+    public let last30Days: Stat
     public let ao5: Stat
     public let ao12: Stat
     public let ao100: Stat
@@ -83,9 +64,9 @@ public struct StatsSummary: Equatable, Sendable {
         func results(from start: String) -> [SolveResult] {
             dated.filter { $0.day >= start }.map(\.result)
         }
-        self.today = PeriodStats(results(from: today))
-        last7Days = PeriodStats(results(from: weekStart))
-        last30Days = PeriodStats(results(from: monthStart))
+        self.today = Statistics.average(results(from: today))
+        last7Days = Statistics.average(results(from: weekStart))
+        last30Days = Statistics.average(results(from: monthStart))
         ao5 = Statistics.averageOf(5, newestFirst)
         ao12 = Statistics.averageOf(12, newestFirst)
         ao100 = Statistics.averageOf(100, newestFirst)

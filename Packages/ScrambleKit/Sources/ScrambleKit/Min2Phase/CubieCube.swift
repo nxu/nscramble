@@ -58,10 +58,6 @@ struct CubieCube: Equatable, Sendable {
         return r
     }
 
-    func applying(_ scramble: Scramble) -> CubieCube {
-        scramble.moves.reduce(self) { $0.applying($1.index) }
-    }
-
     mutating func invert() {
         var temps = CubieCube()
         for edge in 0..<12 {
@@ -239,40 +235,5 @@ struct CubieCube: Equatable, Sendable {
             eperm: eperm,
             flip: Int.random(in: 0..<2048, using: &generator)
         )
-    }
-}
-
-// MARK: Facelets
-
-extension CubieCube {
-    // Facelet indices: U 0-8, R 9-17, F 18-26, D 27-35, L 36-44, B 45-53.
-    static let cornerFacelet: [[Int]] = [
-        [8, 9, 20], [6, 18, 38], [0, 36, 47], [2, 45, 11],
-        [29, 26, 15], [27, 44, 24], [33, 53, 42], [35, 17, 51],
-    ]
-    static let edgeFacelet: [[Int]] = [
-        [5, 10], [7, 19], [3, 37], [1, 46], [32, 16], [28, 25],
-        [30, 43], [34, 52], [23, 12], [21, 41], [50, 39], [48, 14],
-    ]
-
-    /// 54-character facelet string in URFDLB order, as used by min2phase and Kociemba's solver.
-    var facelets: String {
-        let names: [Character] = ["U", "R", "F", "D", "L", "B"]
-        var f = (0..<54).map { names[$0 / 9] }
-        for c in 0..<8 {
-            let j = ca[c] & 7
-            let ori = ca[c] >> 3
-            for n in 0..<3 {
-                f[Self.cornerFacelet[c][(n + ori) % 3]] = names[Self.cornerFacelet[j][n] / 9]
-            }
-        }
-        for e in 0..<12 {
-            let j = ea[e] >> 1
-            let ori = ea[e] & 1
-            for n in 0..<2 {
-                f[Self.edgeFacelet[e][(n + ori) % 2]] = names[Self.edgeFacelet[j][n] / 9]
-            }
-        }
-        return String(f)
     }
 }

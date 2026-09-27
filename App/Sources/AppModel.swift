@@ -12,8 +12,8 @@ final class AppModel {
     private(set) var timer = SpeedTimer()
     private(set) var lastSolve: Solve?
     private(set) var stats: StatsSummary?
-    /// Up to 10 most recent solves of today, newest first.
-    private(set) var todaysRecentSolves: [Solve] = []
+    /// All of today's solves, newest first.
+    private(set) var todaysSolves: [Solve] = []
     private(set) var errorMessage: String?
 
     enum SyncStatus: Equatable {
@@ -165,7 +165,7 @@ final class AppModel {
     func refreshStats() {
         do {
             stats = try database.statsSummary()
-            todaysRecentSolves = try database.solves(onDay: Solve.day(of: Date()), limit: 10)
+            todaysSolves = try database.solves(onDay: Solve.day(of: Date()))
         } catch {
             errorMessage = "Couldn't load statistics. \(error.localizedDescription)"
         }
@@ -173,10 +173,6 @@ final class AppModel {
 
     // MARK: Last solve
 
-    /// Whether the last solve can be edited right now (not while timing).
-    var canEditLastSolve: Bool {
-        lastSolve != nil && timer.state == .idle
-    }
 
     /// Sets `penalty` on the last solve, or clears it if already set.
     func togglePenalty(_ penalty: Penalty) {

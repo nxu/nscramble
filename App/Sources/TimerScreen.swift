@@ -7,8 +7,11 @@ struct TimerScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focused: Bool
+    #if os(iOS)
     @State private var touching = false
+    #endif
     @State private var layoutWidth: CGFloat = 0
+    @State private var tab = Tab.timer
     #if os(macOS)
     @State private var windowController = MiniWindowController()
     #endif
@@ -63,32 +66,35 @@ struct TimerScreen: View {
 
     // MARK: Layouts
 
-    /// Timer area plus the stats table, shown when there's room for both.
+    /// Timer area plus the stats sidebar, shown when there's room for both.
     static let statsPanelWidth: CGFloat = 280
     static let minTimerWidthWithStats: CGFloat = 480
+    /// Below this width (iPhone portrait) the timer uses smaller type.
+    static let compactWidth: CGFloat = 500
 
+    /// Sidebar when there's room; otherwise one section at a time with a tab bar.
     private var normalLayout: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                scrambleButton(fontSize: 26, lineSpacing: 6)
-                    .frame(maxHeight: .infinity)
-                timeView(fontSize: 120, showsPenaltyInTime: true)
-                footer
-                    .frame(maxHeight: .infinity)
-            }
-            .padding(32)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            #if os(iOS)
-            // Touch timer; only on the timer area so the stats table can scroll.
-            .gesture(touchTimerGesture)
-            #endif
-
-            if showsStats {
-                Divider()
-                    .ignoresSafeArea()
-                    .opacity(isTiming ? 0 : 1)
-                statsPanel
+        Group {
+            if showsSidebar {
+                HStack(spacing: 0) {
+                    timerArea
+                    Divider()
+                        .ignoresSafeArea()
+                        .opacity(isTiming ? 0 : 1)
+                    statsSidebar
+                }
+            } else {
+                VStack(spacing: 0) {
+                    Group {
+                        switch tab {
+                        case .timer: timerArea
+                        case .stats: statsSection
+                        case .sync: syncSection
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    tabBar
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -99,8 +105,113 @@ struct TimerScreen: View {
         .overlay(alignment: .topTrailing) { appearanceButton }
     }
 
-    private var showsStats: Bool {
+    private var showsSidebar: Bool {
         layoutWidth >= Self.statsPanelWidth + Self.minTimerWidthWithStats
+    }
+
+    /// Whether the timer is on screen (keyboard input only drives it then).
+    private var showsTimer: Bool {
+        showsSidebar || tab == .timer
+    }
+
+    private var timerArea: some View {
+        let compact = layoutWidth < Self.compactWidth
+        return VStack(spacing: 0) {
+            scrambleButton(fontSize: compact ? 20 : 26, lineSpacing: compact ? 4 : 6)
+                .frame(maxHeight: .infinity)
+            timeView(fontSize: compact ? 96 : 120, showsPenaltyInTime: true)
+            footer
+                .frame(maxHeight: .infinity)
+        }
+        .padding(compact ? 20 : 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        #if os(iOS)
+        // Touch timer; only on the timer area so the stats table can scroll.
+        .gesture(touchTimerGesture)
+        #endif
+    }
+
+    // MARK: Stats and sync
+
+    /// Scrollable stats with the sync card pinned below.
+    private var statsSidebar: some View {
+        VStack(spacing: 0) {
+            stats
+            SyncCard()
+        }
+        .frame(width: Self.statsPanelWidth)
+        .opacity(isTiming ? 0 : 1)
+    }
+
+    private var statsSection: some View {
+        stats
+            .frame(maxWidth: Self.statsPanelWidth + 40)
+    }
+
+    private var syncSection: some View {
+        SyncCard(showsTopDivider: false)
+            .frame(maxWidth: Self.statsPanelWidth + 40)
+            .frame(maxHeight: .infinity)
+    }
+
+    private var stats: some View {
+        TimelineView(.everyMinute) { context in
+            StatsPanel(stats: model.stats, todaysSolves: model.todaysSolves, date: context.date)
+                // Recompute when the day changes (and on first appearance).
+                .task(id: Solve.day(of: context.date)) { model.refreshStats() }
+        }
+    }
+
+    // MARK: Tabs
+
+    enum Tab: CaseIterable {
+        case timer, stats, sync
+
+        var icon: String {
+            switch self {
+            case .timer: "stopwatch"
+            case .stats: "chart-bar"
+            case .sync: "sync-alt"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .timer: "Timer"
+            case .stats: "Stats"
+            case .sync: "Sync"
+            }
+        }
+    }
+
+    /// Icon-only bottom bar; hidden while timing.
+    private var tabBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 0) {
+                ForEach(Tab.allCases, id: \.self) { item in
+                    Button {
+                        tab = item
+                        focused = true
+                    } label: {
+                        Image(item.icon)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                            .foregroundStyle(tab == item ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.title)
+                    .help(item.title)
+                }
+            }
+        }
+        .opacity(isTiming ? 0 : 1)
+        .allowsHitTesting(!isTiming)
     }
 
     #if os(iOS)
@@ -118,20 +229,6 @@ struct TimerScreen: View {
             }
     }
     #endif
-
-    /// Scrollable stats with the sync card pinned below.
-    private var statsPanel: some View {
-        VStack(spacing: 0) {
-            TimelineView(.everyMinute) { context in
-                StatsPanel(stats: model.stats, recentSolves: model.todaysRecentSolves, date: context.date)
-                    // Recompute when the day changes (and on first appearance).
-                    .task(id: Solve.day(of: context.date)) { model.refreshStats() }
-            }
-            SyncCard()
-        }
-        .frame(width: Self.statsPanelWidth)
-        .opacity(isTiming ? 0 : 1)
-    }
 
     /// Cycles System -> Light -> Dark.
     private var appearanceButton: some View {
@@ -309,6 +406,8 @@ struct TimerScreen: View {
     // MARK: Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        // Stats/sync tab: leave keys alone (the timer can't be running, the tab bar hides while timing).
+        guard showsTimer || isTiming || model.timer.state == .stopped else { return .ignored }
         let isSpace = press.key == .space
         switch press.phase {
         case .down:

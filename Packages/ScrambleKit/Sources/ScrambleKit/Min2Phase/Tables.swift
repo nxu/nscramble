@@ -130,16 +130,10 @@ final class Tables: Sendable {
     let firstMoveSym: [Int]
 
     // Sym-coordinate <-> raw-coordinate maps.
-    let flipS2R: [Int]
     let flipR2S: [Int]
     let flipS2RF: [Int]
-    let symStateFlip: [Int]
-    let twistS2R: [Int]
     let twistR2S: [Int]
-    let symStateTwist: [Int]
-    let ePermS2R: [Int]
     let ePermR2S: [Int]
-    let symStatePerm: [Int]
     let perm2CombP: [Int]
     let permInvEdgeSym: [Int]
     let mPermInv: [Int]
@@ -155,7 +149,6 @@ final class Tables: Sendable {
     let ePermMove: [Int]  // [2768 * 10]
     let mPermMove: [Int]  // [24 * 10]
     let mPermConj: [Int]  // [24 * 16]
-    let cCombPMove: [Int]  // [140 * 10]
     let cCombPConj: [Int]  // [140 * 16]
 
     // Pruning tables, 8 four-bit entries per word.
@@ -341,16 +334,10 @@ final class Tables: Sendable {
         self.sym8Move = sym8Move
         self.moveCubeSym = moveCubeSym
         self.firstMoveSym = firstMoveSym
-        self.flipS2R = flip.sym2Raw
         self.flipR2S = flip.raw2Sym
         self.flipS2RF = flip.sym2RawFull
-        self.symStateFlip = flip.symState
-        self.twistS2R = twist.sym2Raw
         self.twistR2S = twist.raw2Sym
-        self.symStateTwist = twist.symState
-        self.ePermS2R = ePermS2R
         self.ePermR2S = ePermR2S
-        self.symStatePerm = perm.symState
         self.perm2CombP = perm2CombP
         self.permInvEdgeSym = permInvEdgeSym
         self.mPermInv = mPermInv
@@ -362,7 +349,6 @@ final class Tables: Sendable {
         self.ePermMove = ePermMove
         self.mPermMove = mPermMove
         self.mPermConj = mPermConj
-        self.cCombPMove = cCombPMove
         self.cCombPConj = cCombPConj
     }
 

@@ -1,5 +1,6 @@
 packages := "ScrambleKit StatsKit Storage TimerKit"
 ipad := "iPad (A16)"
+iphone := "iPhone 17"
 bundle_id := "hu.nxu.nscramble"
 
 default:
@@ -35,13 +36,19 @@ run-mac: build-mac
     -osascript -e 'quit app "NScramble"' 2>/dev/null
     open DerivedData/Build/Products/Debug/NScramble.app
 
-# Build and run the app on the iPad simulator
-run-ipad: build-ipad
-    -xcrun simctl boot "{{ipad}}" 2>/dev/null
+# Build and run the app on an iOS simulator (default: the iPad one)
+run-sim device=ipad: build-ipad
+    -xcrun simctl boot "{{device}}" 2>/dev/null
     @# Newer Xcodes replace Simulator.app with DeviceHub.app.
     dev="$(xcode-select -p)"; if [ -d "$dev/Applications/Simulator.app" ]; then open "$dev/Applications/Simulator.app"; else open "$dev/../Applications/DeviceHub.app"; fi
-    xcrun simctl install "{{ipad}}" DerivedData/Build/Products/Debug-iphonesimulator/NScramble.app
-    xcrun simctl launch --terminate-running-process "{{ipad}}" {{bundle_id}}
+    xcrun simctl install "{{device}}" DerivedData/Build/Products/Debug-iphonesimulator/NScramble.app
+    xcrun simctl launch --terminate-running-process "{{device}}" {{bundle_id}}
+
+# Build and run the app on the iPhone simulator
+run-iphone: (run-sim iphone)
+
+# Build and run the app on the iPad simulator
+run-ipad: (run-sim ipad)
 
 # Open the project in Xcode
 open: project
