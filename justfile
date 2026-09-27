@@ -81,6 +81,18 @@ run-iphone: (run-sim iphone)
 # Build and run the app on the iPad simulator
 run-ipad: (run-sim ipad)
 
+# Build, install and launch on a connected iPhone/iPad. team: your Team ID; device: its UDID or name
+# (see `xcrun devicectl list devices`). Registers the device with the team on first use.
+run-device team device: project
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "{{device}}" =~ ^[0-9A-Fa-f-]{20,}$ ]]; then dest="platform=iOS,id={{device}}"; else dest="platform=iOS,name={{device}}"; fi
+    xcodebuild -project NScramble.xcodeproj -scheme NScramble -configuration Debug \
+        -destination "$dest" -derivedDataPath DerivedData \
+        -allowProvisioningUpdates -allowProvisioningDeviceRegistration DEVELOPMENT_TEAM={{team}} build
+    xcrun devicectl device install app --device "{{device}}" DerivedData/Build/Products/Debug-iphoneos/NScramble.app
+    xcrun devicectl device process launch --device "{{device}}" {{bundle_id}}
+
 # Open the project in Xcode
 open: project
     open NScramble.xcodeproj

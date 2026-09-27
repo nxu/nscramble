@@ -45,5 +45,5 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
-        # Sign to Run Locally; set DEVELOPMENT_TEAM to deploy to a physical iPad.
-        CODE_SIGN_IDENTITY: "-"
+        # Mac: Sign to Run Locally. iOS devices need a development team (see `just run-device`).
+        CODE_SIGN_IDENTITY[sdk=macosx*]: "-"
