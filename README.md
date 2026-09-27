@@ -110,5 +110,4 @@ GPL-3.0 (see [LICENSE](LICENSE)).
 - The scrambler is a port of [min2phase](https://github.com/cs0x7f/min2phase) by Chen Shuang (GPL-3.0),
   checked against [cubing.js](https://github.com/cubing/cubing.js).
 - Storage uses [GRDB.swift](https://github.com/groue/GRDB.swift).
-- The tab and settings icons are from Font Awesome Pro (commercial license); they are not covered by
-  this repository's license.
+- The tab and settings icons are free icons from Font Awesome Pro 5
