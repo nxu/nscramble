@@ -1,0 +1,42 @@
+name: Release
+
+# Tag a version (1.2.3 or v1.2.3) to build the Mac and iOS apps and attach them to a GitHub release.
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+*", "v[0-9]+.[0-9]+.[0-9]+*"]
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Version from tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Package the Mac app
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ github.run_number }}
+        run: nix develop -c just package-mac "$VERSION" "$BUILD"
+      - name: Package the iOS app (iPhone and iPad)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ github.run_number }}
+        run: nix develop -c just package-ios "$VERSION" "$BUILD"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

@@ -64,6 +64,19 @@ reference data used by the scrambler tests).
 Local builds are ad-hoc signed ("Sign to Run Locally"). To run on a physical iPhone or iPad, set
 `DEVELOPMENT_TEAM` in `project.yml`.
 
+## CI and releases
+
+GitHub Actions (`.github/workflows/`): every push and pull request runs the package tests and builds the
+Mac and iOS apps. Pushing a version tag (`1.2.3` or `v1.2.3`) runs the tests and creates a GitHub release
+with `NScramble-<version>-macos.zip` and `NScramble-<version>-ios-unsigned.ipa` (one IPA for iPhone and
+iPad). The tag becomes the app version (a pre-release suffix like `-beta.1` is dropped from the app's version
+number but kept in the file names, and the release is marked as a pre-release); the build number is the CI run
+number. The same packages can be built locally with `just package-mac <version>` and `just package-ios <version>`.
+
+The builds are not signed with a developer certificate: the Mac app is ad-hoc signed (macOS will ask to
+confirm opening it the first time), and the IPA must be signed before it can be installed (e.g. with
+Sideloadly or AltStore, or by setting `DEVELOPMENT_TEAM` and building from Xcode).
+
 ## Project layout
 
 ```

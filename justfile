@@ -35,6 +35,30 @@ build-mac: project
 build-ipad: project
     xcodebuild -project NScramble.xcodeproj -scheme NScramble -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData build
 
+# Release build of the Mac app, zipped into dist/ (e.g. `just package-mac 1.2.3 42`)
+package-mac version build="1": project
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # CFBundleShortVersionString must be numeric: 1.2.3-beta.1 -> 1.2.3 (the file name keeps the full version).
+    xcodebuild -project NScramble.xcodeproj -scheme NScramble -configuration Release \
+        -destination 'generic/platform=macOS' -derivedDataPath DerivedData \
+        MARKETING_VERSION="$(echo "{{version}}" | cut -d- -f1)" CURRENT_PROJECT_VERSION="{{build}}" build
+    mkdir -p dist
+    ditto -c -k --keepParent DerivedData/Build/Products/Release/NScramble.app "dist/NScramble-{{version}}-macos.zip"
+
+# Release build of the iPhone/iPad app as an unsigned IPA in dist/ (e.g. `just package-ios 1.2.3 42`)
+package-ios version build="1": project
+    #!/usr/bin/env bash
+    set -euo pipefail
+    xcodebuild -project NScramble.xcodeproj -scheme NScramble -configuration Release \
+        -destination 'generic/platform=iOS' -derivedDataPath DerivedData \
+        MARKETING_VERSION="$(echo "{{version}}" | cut -d- -f1)" CURRENT_PROJECT_VERSION="{{build}}" \
+        CODE_SIGNING_ALLOWED=NO build
+    rm -rf dist/ipa && mkdir -p dist/ipa/Payload
+    cp -R DerivedData/Build/Products/Release-iphoneos/NScramble.app dist/ipa/Payload/
+    (cd dist/ipa && zip -qr "../NScramble-{{version}}-ios-unsigned.ipa" Payload)
+    rm -rf dist/ipa
+
 # Build and run the macOS app
 run-mac: build-mac
     -osascript -e 'quit app "NScramble"' 2>/dev/null
