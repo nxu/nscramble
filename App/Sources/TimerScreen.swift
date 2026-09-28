@@ -12,6 +12,11 @@ struct TimerScreen: View {
     #endif
     @State private var layoutWidth: CGFloat = 0
     @State private var tab = Tab.timer
+    /// Horizontal position of the scramble while swiping or animating to a new one.
+    @State private var scrambleOffset: CGFloat = 0
+    @State private var isSwappingScramble = false
+    /// Counts new scrambles, for the haptic tap.
+    @State private var newScrambleCount = 0
     #if os(macOS)
     @State private var windowController = MiniWindowController()
     #endif
@@ -51,6 +56,8 @@ struct TimerScreen: View {
         .onKeyPress(phases: [.down, .repeat, .up], action: handleKey)
         .onAppear { focused = true }
         .onChange(of: scenePhase) { if scenePhase != .active { model.cancelHold() } }
+        // "New Scramble" (⌘→) works from any tab or layout.
+        .onChange(of: model.newScrambleRequests) { animateNewScramble() }
         .animation(.easeOut(duration: 0.15), value: isTiming)
         #if os(macOS)
         .background(WindowAccessor { window in
@@ -280,21 +287,84 @@ struct TimerScreen: View {
 
     // MARK: Parts
 
+    /// The scramble. New one: click it or ⌘→ (Mac), or swipe it to the right (iPhone/iPad).
     private func scrambleButton(fontSize: CGFloat, lineSpacing: CGFloat) -> some View {
-        Button {
-            model.skipScramble()
-            focused = true
-        } label: {
-            Text(model.scramble?.description ?? "…")
-                .font(.system(size: fontSize, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(lineSpacing)
+        let text = Text(model.scramble?.description ?? "…")
+            .font(.system(size: fontSize, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .lineSpacing(lineSpacing)
+        return Group {
+            #if os(macOS)
+            Button {
+                animateNewScramble()
+                focused = true
+            } label: {
+                text
+            }
+            .buttonStyle(.plain)
+            .help("New scramble (⌘→)")
+            #else
+            text
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+                // Takes precedence over the touch timer: touching the scramble never arms the timer.
+                .highPriorityGesture(scrambleSwipe)
+                .accessibilityAction(named: "New scramble") { animateNewScramble() }
+            #endif
         }
-        .buttonStyle(.plain)
-        .help("New scramble")
+        .offset(x: scrambleOffset)
+        .opacity(1 - min(abs(scrambleOffset) / Self.scrambleFadeDistance, 1))
+        .sensoryFeedback(.impact(weight: .light), trigger: newScrambleCount)
         .opacity(isTiming ? 0 : 1)
     }
+
+    /// How far the scramble travels before it's fully transparent, and how far it flies out.
+    static let scrambleFadeDistance: CGFloat = 320
+    static let scrambleFlyOutDistance: CGFloat = 600
+
+    /// Slides the current scramble out to the right, then slides the new one in from the left.
+    private func animateNewScramble() {
+        // One swap at a time; a request during the animation is dropped.
+        guard !isSwappingScramble else { return }
+        guard model.timer.state == .idle else {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { scrambleOffset = 0 }
+            return
+        }
+        isSwappingScramble = true
+        withAnimation(.easeIn(duration: 0.14)) {
+            scrambleOffset = Self.scrambleFlyOutDistance
+        } completion: {
+            model.skipScramble()
+            newScrambleCount += 1
+            scrambleOffset = -80
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                scrambleOffset = 0
+            } completion: {
+                isSwappingScramble = false
+            }
+        }
+    }
+
+    #if os(iOS)
+    /// Follows the finger to the right (with resistance to the left); a long or fast swipe replaces the scramble.
+    private var scrambleSwipe: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard model.timer.state == .idle, !isSwappingScramble else { return }
+                let dx = value.translation.width
+                scrambleOffset = dx > 0 ? dx : dx / 4
+            }
+            .onEnded { value in
+                guard !isSwappingScramble else { return }
+                if value.translation.width > 100 || value.predictedEndTranslation.width > 240 {
+                    animateNewScramble()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { scrambleOffset = 0 }
+                }
+            }
+    }
+    #endif
 
     /// `showsPenaltyInTime`: render `14.34+` / `DNF` in the time itself (normal layout) instead of a badge.
     private func timeView(fontSize: CGFloat, showsPenaltyInTime: Bool) -> some View {

@@ -9,6 +9,8 @@ statistics, and optional sync between devices through a self-hosted server
 - **Scrambles** — random-state 3×3 scrambles, generated the same way as cubing.js / TNoodle: a uniformly
   random cube state (rejecting states that are solved or one move away), solved with a Swift port of
   [min2phase](https://github.com/cs0x7f/min2phase), at most 21 moves. Verified against cubing.js.
+  Skip to a new scramble without timing: ⌘→ or click the scramble (Mac), or swipe it to the right
+  (iPhone/iPad).
 - **Timer** — hold space (or touch) until the time turns green, release to start, any key or touch to stop.
   Esc stops the timer and records a DNF.
 - **Penalties** — mark the last solve OK, +2, DNF, or delete it (soft delete, restorable with OK).
@@ -25,6 +27,7 @@ statistics, and optional sync between devices through a self-hosted server
 | Space (hold, release) | Arm and start the timer |
 | Any key | Stop the timer |
 | Esc | Stop the timer as a DNF (or cancel a hold) |
+| ⌘→ | New scramble |
 | ⌘1 / ⌘2 / ⌘3 | Mark the last solve OK / +2 / DNF |
 | ⌘⌫ | Delete the last solve |
 | ⌘O / ⌘I | Normal view / mini view (Mac) |

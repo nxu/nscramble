@@ -6,6 +6,9 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Solve") {
+            Button("New Scramble") { model.requestNewScramble() }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+            Divider()
             Button("OK") { model.markLastSolveOK() }
                 .keyboardShortcut("1", modifiers: .command)
             Button("+2") { model.togglePenalty(.plusTwo) }

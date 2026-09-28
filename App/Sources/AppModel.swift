@@ -219,6 +219,14 @@ final class AppModel {
 
     // MARK: Scrambles
 
+    /// Bumped by "New Scramble" (⌘→); the timer screen animates the old scramble out, then calls `skipScramble`.
+    private(set) var newScrambleRequests = 0
+
+    func requestNewScramble() {
+        guard timer.state == .idle else { return }
+        newScrambleRequests += 1
+    }
+
     func skipScramble() {
         guard timer.state == .idle else { return }
         Task { await advanceScramble() }
